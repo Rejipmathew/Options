@@ -1,7 +1,8 @@
-import yfinance as yf
+import streamlit as st
 import pandas as pd
 import numpy as np
-import streamlit as st
+import yfinance as yf
+
 
 # Streamlit app title
 st.title("Option Trading Indicators without TA-Lib")
