@@ -1,136 +1,58 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import matplotlib.pyplot as plt
 
-# Streamlit app title
-st.title("Stock Analysis Dashboard")
+# Streamlit App Title
+st.title("📈 Stock Price Dashboard")
 
-# User input for stock ticker
-ticker_input = st.text_input("Enter stock ticker (e.g., MSFT):", value="MSFT")
-ticker = yf.Ticker(ticker_input)
+# Sidebar for user input
+st.sidebar.header("User Input")
 
-# Sidebar for navigation
-st.sidebar.header("Choose Data to Display")
-options = st.sidebar.multiselect(
-    "Select the data you want to explore:",
-    ["Stock Info", "Historical Data", "Dividends", "Actions", "Financials", 
-     "Holders", "Recommendations", "Analysts Data", "Earnings Dates", "Options Data", "News"],
-    default=["Stock Info", "Historical Data"]
-)
+# Get stock ticker symbol from user
+ticker = st.sidebar.text_input("Enter Stock Ticker Symbol (e.g., AAPL, TSLA, MSFT)", "AAPL")
 
-# Display stock information
-if "Stock Info" in options:
-    st.subheader(f"Stock Information: {ticker_input}")
-    try:
-        stock_info = ticker.info
-        st.write(f"**Company Name**: {stock_info.get('longName', 'N/A')}")
-        st.write(f"**Sector**: {stock_info.get('sector', 'N/A')}")
-        st.write(f"**Industry**: {stock_info.get('industry', 'N/A')}")
-        st.write(f"**Market Cap**: {stock_info.get('marketCap', 'N/A')}")
-        st.write(f"**52-Week High**: {stock_info.get('fiftyTwoWeekHigh', 'N/A')}")
-        st.write(f"**52-Week Low**: {stock_info.get('fiftyTwoWeekLow', 'N/A')}")
-    except Exception as e:
-        st.error(f"Could not retrieve stock information: {e}")
+# Date range selection
+start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2023-01-01"))
+end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
 
-# Display historical data with visualization
-if "Historical Data" in options:
-    st.subheader("Historical Market Data")
-    period = st.selectbox("Select the period:", ["1mo", "3mo", "6mo", "1y", "5y", "max"], index=0)
-    interval = st.selectbox("Select the interval:", ["1d", "1wk", "1mo"], index=0)
-    hist = ticker.history(period=period, interval=interval)
+# Load stock data using yfinance
+@st.cache_data
+def load_data(ticker, start_date, end_date):
+    data = yf.download(ticker, start=start_date, end=end_date)
+    data.reset_index(inplace=True)
+    return data
+
+data = load_data(ticker, start_date, end_date)
+
+# Display Data
+if not data.empty:
+    st.subheader(f"Stock Data for {ticker.upper()}")
+    st.write(data.tail())
     
-    if not hist.empty:
-        st.line_chart(hist['Close'], height=300)
-        st.write(hist)
-    else:
-        st.warning("No historical data available.")
+    # Line plot of stock closing price
+    st.subheader("Closing Price")
+    st.line_chart(data['Close'])
 
-# Display dividends and actions
-if "Dividends" in options:
-    st.subheader("Dividends")
-    st.line_chart(ticker.dividends)
-    st.write(ticker.dividends)
+    # Plot Moving Averages
+    st.subheader("Moving Averages")
+    ma_short = st.sidebar.slider("Short Moving Average (days)", 5, 50, 20)
+    ma_long = st.sidebar.slider("Long Moving Average (days)", 50, 200, 100)
+    data[f'SMA_{ma_short}'] = data['Close'].rolling(window=ma_short).mean()
+    data[f'SMA_{ma_long}'] = data['Close'].rolling(window=ma_long).mean()
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(data['Date'], data['Close'], label="Close Price", alpha=0.5)
+    plt.plot(data['Date'], data[f'SMA_{ma_short}'], label=f"SMA {ma_short}", alpha=0.75)
+    plt.plot(data['Date'], data[f'SMA_{ma_long}'], label=f"SMA {ma_long}", alpha=0.75)
+    plt.legend()
+    st.pyplot(plt)
 
-if "Actions" in options:
-    st.subheader("Stock Actions")
-    st.write(ticker.actions)
+    # Volume
+    st.subheader("Volume")
+    st.bar_chart(data['Volume'])
+else:
+    st.error("No data found for the given ticker and date range.")
 
-# Display financials (income statement, balance sheet, cash flow)
-if "Financials" in options:
-    st.subheader("Financial Statements")
-    st.write("**Quarterly Income Statement**")
-    st.write(ticker.quarterly_income_stmt)
-
-    st.write("**Quarterly Balance Sheet**")
-    st.write(ticker.quarterly_balance_sheet)
-
-    st.write("**Quarterly Cash Flow**")
-    st.write(ticker.quarterly_cashflow)
-
-# Display holders
-if "Holders" in options:
-    st.subheader("Holders")
-    st.write("**Major Holders**")
-    st.write(ticker.major_holders)
-
-    st.write("**Institutional Holders**")
-    st.write(ticker.institutional_holders)
-
-    st.write("**Mutual Fund Holders**")
-    st.write(ticker.mutualfund_holders)
-
-# Display recommendations and analyst data
-if "Recommendations" in options:
-    st.subheader("Recommendations")
-    st.write(ticker.recommendations)
-    st.write("**Upgrades and Downgrades**")
-    st.write(ticker.upgrades_downgrades)
-
-if "Analysts Data" in options:
-    st.subheader("Analyst Estimates")
-    st.write("**Analyst Price Targets**")
-    st.write(ticker.analyst_price_targets)
-
-    st.write("**Earnings Estimates**")
-    st.write(ticker.earnings_estimate)
-
-    st.write("**Revenue Estimates**")
-    st.write(ticker.revenue_estimate)
-
-    st.write("**EPS Trend**")
-    st.write(ticker.eps_trend)
-
-    st.write("**Growth Estimates**")
-    st.write(ticker.growth_estimates)
-
-# Display earnings dates
-if "Earnings Dates" in options:
-    st.subheader("Earnings Dates")
-    st.write(ticker.earnings_dates)
-
-# Display options data
-if "Options Data" in options:
-    st.subheader("Options Data")
-    expirations = ticker.options
-    if expirations:
-        selected_expiry = st.selectbox("Select expiration date:", expirations)
-        opt_chain = ticker.option_chain(selected_expiry)
-        st.write("**Calls**")
-        st.write(opt_chain.calls)
-        st.write("**Puts**")
-        st.write(opt_chain.puts)
-    else:
-        st.warning("No options data available.")
-
-# Display news
-if "News" in options:
-    st.subheader("Latest News")
-    news = ticker.news
-    if news:
-        for article in news:
-            st.write(f"**{article['title']}**")
-            st.write(f"{article['publisher']} - {article['providerPublishTime']}")
-            st.write(f"[Read more]({article['link']})")
-    else:
-        st.warning("No news articles available.")
-
+# Add footer
+st.write("Data Source: Yahoo Finance")
