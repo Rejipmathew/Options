@@ -1,151 +1,136 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
 import yfinance as yf
-
+import pandas as pd
 
 # Streamlit app title
-st.title("Option Trading Indicators without TA-Lib")
+st.title("Stock Analysis Dashboard")
 
 # User input for stock ticker
-ticker_input = st.text_input("Enter stock ticker (e.g., AAPL):", value="AAPL")
+ticker_input = st.text_input("Enter stock ticker (e.g., MSFT):", value="MSFT")
+ticker = yf.Ticker(ticker_input)
 
-# Function to fetch stock data with caching
-@st.cache_data
-def get_ticker_data(ticker_input):
-    return yf.Ticker(ticker_input)
+# Sidebar for navigation
+st.sidebar.header("Choose Data to Display")
+options = st.sidebar.multiselect(
+    "Select the data you want to explore:",
+    ["Stock Info", "Historical Data", "Dividends", "Actions", "Financials", 
+     "Holders", "Recommendations", "Analysts Data", "Earnings Dates", "Options Data", "News"],
+    default=["Stock Info", "Historical Data"]
+)
 
-# Function to fetch stock information with caching
-@st.cache_data
-def get_stock_info(ticker):
-    return ticker.info
+# Display stock information
+if "Stock Info" in options:
+    st.subheader(f"Stock Information: {ticker_input}")
+    try:
+        stock_info = ticker.info
+        st.write(f"**Company Name**: {stock_info.get('longName', 'N/A')}")
+        st.write(f"**Sector**: {stock_info.get('sector', 'N/A')}")
+        st.write(f"**Industry**: {stock_info.get('industry', 'N/A')}")
+        st.write(f"**Market Cap**: {stock_info.get('marketCap', 'N/A')}")
+        st.write(f"**52-Week High**: {stock_info.get('fiftyTwoWeekHigh', 'N/A')}")
+        st.write(f"**52-Week Low**: {stock_info.get('fiftyTwoWeekLow', 'N/A')}")
+    except Exception as e:
+        st.error(f"Could not retrieve stock information: {e}")
 
-# Function to fetch historical data with caching
-@st.cache_data
-def get_historical_data(ticker, period, interval):
-    return ticker.history(period=period, interval=interval)
+# Display historical data with visualization
+if "Historical Data" in options:
+    st.subheader("Historical Market Data")
+    period = st.selectbox("Select the period:", ["1mo", "3mo", "6mo", "1y", "5y", "max"], index=0)
+    interval = st.selectbox("Select the interval:", ["1d", "1wk", "1mo"], index=0)
+    hist = ticker.history(period=period, interval=interval)
+    
+    if not hist.empty:
+        st.line_chart(hist['Close'], height=300)
+        st.write(hist)
+    else:
+        st.warning("No historical data available.")
 
-# Function to fetch options data with caching
-@st.cache_data
-def get_option_chain(ticker, expiry):
-    return ticker.option_chain(expiry)
+# Display dividends and actions
+if "Dividends" in options:
+    st.subheader("Dividends")
+    st.line_chart(ticker.dividends)
+    st.write(ticker.dividends)
 
-# Load stock data using yfinance
-ticker = get_ticker_data(ticker_input)
+if "Actions" in options:
+    st.subheader("Stock Actions")
+    st.write(ticker.actions)
 
-# Display basic stock information
-st.subheader(f"Stock Information: {ticker_input}")
+# Display financials (income statement, balance sheet, cash flow)
+if "Financials" in options:
+    st.subheader("Financial Statements")
+    st.write("**Quarterly Income Statement**")
+    st.write(ticker.quarterly_income_stmt)
 
-try:
-    stock_info = get_stock_info(ticker)
-    price = stock_info.get('regularMarketPrice', 'N/A')
-    market_cap = stock_info.get('marketCap', 'N/A')
-    fifty_two_week_high = stock_info.get('fiftyTwoWeekHigh', 'N/A')
-    fifty_two_week_low = stock_info.get('fiftyTwoWeekLow', 'N/A')
+    st.write("**Quarterly Balance Sheet**")
+    st.write(ticker.quarterly_balance_sheet)
 
-    st.write(f"Price: {price}")
-    st.write(f"Market Cap: {market_cap}")
-    st.write(f"52-Week High: {fifty_two_week_high}")
-    st.write(f"52-Week Low: {fifty_two_week_low}")
+    st.write("**Quarterly Cash Flow**")
+    st.write(ticker.quarterly_cashflow)
 
-except Exception as e:
-    st.write(f"Could not retrieve stock information: {e}")
+# Display holders
+if "Holders" in options:
+    st.subheader("Holders")
+    st.write("**Major Holders**")
+    st.write(ticker.major_holders)
 
-# Fetch historical data
-period = st.selectbox("Choose time period for historical data:", ['1mo', '3mo', '6mo', '1y', '5y'])
-interval = st.selectbox("Choose time interval:", ['1d', '1wk', '1mo'])
-historical_data = get_historical_data(ticker, period, interval)
+    st.write("**Institutional Holders**")
+    st.write(ticker.institutional_holders)
 
-# Display a line chart for the stock's closing price
-st.subheader("Historical Stock Prices")
-st.line_chart(historical_data['Close'])
+    st.write("**Mutual Fund Holders**")
+    st.write(ticker.mutualfund_holders)
 
-# Custom RSI calculation
-def calculate_rsi(data, window):
-    delta = data.diff(1)
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+# Display recommendations and analyst data
+if "Recommendations" in options:
+    st.subheader("Recommendations")
+    st.write(ticker.recommendations)
+    st.write("**Upgrades and Downgrades**")
+    st.write(ticker.upgrades_downgrades)
 
-# Custom Bollinger Bands calculation
-def calculate_bollinger_bands(data, window, num_std):
-    rolling_mean = data.rolling(window).mean()
-    rolling_std = data.rolling(window).std()
-    upper_band = rolling_mean + (rolling_std * num_std)
-    lower_band = rolling_mean - (rolling_std * num_std)
-    return upper_band, rolling_mean, lower_band
+if "Analysts Data" in options:
+    st.subheader("Analyst Estimates")
+    st.write("**Analyst Price Targets**")
+    st.write(ticker.analyst_price_targets)
 
-# Custom Intraday Momentum Index (IMI) calculation
-def calculate_imi(open_data, close_data, window):
-    up = (close_data > open_data).astype(int) * (close_data - open_data)
-    down = (open_data > close_data).astype(int) * (open_data - close_data)
-    imi = 100 * (up.rolling(window).sum() / (up.rolling(window).sum() + down.rolling(window).sum()))
-    return imi
+    st.write("**Earnings Estimates**")
+    st.write(ticker.earnings_estimate)
 
-# Custom Money Flow Index (MFI) calculation
-def calculate_mfi(high, low, close, volume, window):
-    typical_price = (high + low + close) / 3
-    money_flow = typical_price * volume
-    positive_flow = (money_flow.where(close > close.shift(1), 0)).rolling(window).sum()
-    negative_flow = (money_flow.where(close < close.shift(1), 0)).rolling(window).sum()
-    money_flow_ratio = positive_flow / negative_flow
-    mfi = 100 - (100 / (1 + money_flow_ratio))
-    return mfi
+    st.write("**Revenue Estimates**")
+    st.write(ticker.revenue_estimate)
 
-# Calculate and display RSI
-st.subheader("Relative Strength Index (RSI)")
-rsi_period = st.slider("Choose RSI period:", min_value=5, max_value=30, value=14)
-rsi = calculate_rsi(historical_data['Close'], rsi_period)
-st.line_chart(rsi)
+    st.write("**EPS Trend**")
+    st.write(ticker.eps_trend)
 
-# Calculate and display Bollinger Bands
-st.subheader("Bollinger Bands")
-bb_period = st.slider("Choose Bollinger Bands period:", min_value=10, max_value=50, value=20)
-num_std = st.slider("Choose number of standard deviations:", min_value=1, max_value=3, value=2)
-upper_band, middle_band, lower_band = calculate_bollinger_bands(historical_data['Close'], bb_period, num_std)
-bollinger_df = pd.DataFrame({'Upper Band': upper_band, 'Middle Band': middle_band, 'Lower Band': lower_band})
-st.line_chart(bollinger_df)
+    st.write("**Growth Estimates**")
+    st.write(ticker.growth_estimates)
 
-# Calculate and display IMI
-st.subheader("Intraday Momentum Index (IMI)")
-imi_period = st.slider("Choose IMI period:", min_value=5, max_value=30, value=14)
-imi = calculate_imi(historical_data['Open'], historical_data['Close'], imi_period)
-st.line_chart(imi)
+# Display earnings dates
+if "Earnings Dates" in options:
+    st.subheader("Earnings Dates")
+    st.write(ticker.earnings_dates)
 
-# Calculate and display MFI
-st.subheader("Money Flow Index (MFI)")
-mfi_period = st.slider("Choose MFI period:", min_value=5, max_value=30, value=14)
-mfi = calculate_mfi(historical_data['High'], historical_data['Low'], historical_data['Close'], historical_data['Volume'], mfi_period)
-st.line_chart(mfi)
+# Display options data
+if "Options Data" in options:
+    st.subheader("Options Data")
+    expirations = ticker.options
+    if expirations:
+        selected_expiry = st.selectbox("Select expiration date:", expirations)
+        opt_chain = ticker.option_chain(selected_expiry)
+        st.write("**Calls**")
+        st.write(opt_chain.calls)
+        st.write("**Puts**")
+        st.write(opt_chain.puts)
+    else:
+        st.warning("No options data available.")
 
-# Display available option expiration dates
-st.subheader("Available Option Expiration Dates")
-expirations = ticker.options
-if expirations:
-    selected_expiry = st.selectbox("Choose expiration date:", expirations)
+# Display news
+if "News" in options:
+    st.subheader("Latest News")
+    news = ticker.news
+    if news:
+        for article in news:
+            st.write(f"**{article['title']}**")
+            st.write(f"{article['publisher']} - {article['providerPublishTime']}")
+            st.write(f"[Read more]({article['link']})")
+    else:
+        st.warning("No news articles available.")
 
-    # Load option chain for the selected expiration date
-    option_chain = get_option_chain(ticker, selected_expiry)
-    calls = option_chain.calls
-    puts = option_chain.puts
-
-    calls_sorted = calls[['strike', 'openInterest']].sort_values(by='openInterest', ascending=False)
-    puts_sorted = puts[['strike', 'openInterest']].sort_values(by='openInterest', ascending=False)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Calls Open Interest (Descending)")
-        st.write(calls_sorted)
-
-    with col2:
-        st.subheader("Puts Open Interest (Descending)")
-        st.write(puts_sorted)
-
-    st.subheader("Put-Call Ratio (PCR) Indicator")
-    put_call_ratio = puts['openInterest'].sum() / calls['openInterest'].sum()
-    st.write(f"Put-Call Ratio: {put_call_ratio:.2f}")
-else:
-    st.write("No option expiration dates available for this ticker.")
